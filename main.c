@@ -90,7 +90,7 @@ void page_fault_handler( struct page_table *pt, int page )
 			fifocounter++;
 
 		} else if(!strcmp(replacement,"custom")) {
-			replacementFrame = customReplacement();
+			replacementFrame = NRUReplacement();
 
 		} else {
 			fprintf(stderr,"unknown replacement algorithm: %s\n",replacement);
