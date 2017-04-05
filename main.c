@@ -49,6 +49,10 @@ int fifoReplacement() {
 	return fifocounter;
 }
 
+int pagesReplacement() {
+	return npages%nframes;
+}
+
 void page_fault_handler( struct page_table *pt, int page )
 {
 	printf("page fault on page #%d\n",page);
@@ -91,7 +95,9 @@ void page_fault_handler( struct page_table *pt, int page )
 			fifocounter++;
 
 		} else if(!strcmp(replacement,"custom")) {
-			
+			replacementFrame = pagesReplacement();
+
+			/*
 			while (1) {
 				page_table_get_entry(pt,frameQueueP[secondCounter],frameP,bitsp);
 				if ( curbits < 2 ) {
@@ -106,6 +112,7 @@ void page_fault_handler( struct page_table *pt, int page )
 					continue;
 				}
 			}
+			*/
 
 		} else {
 			fprintf(stderr,"unknown replacement algorithm: %s\n",replacement);
