@@ -9,8 +9,12 @@ how to use the page table and disk interfaces.
 /*
 Page fault:
 1. permissions
-2. virtual address space values
-3.
+2. page doesnt exist in physmem
+3. theres no room in physmem
+
+
+Not all accesses occur on page faults
+
 
 */
 
@@ -27,6 +31,7 @@ Page fault:
 int nframes = 1;
 int npages = 1;
 int fifocounter = 0;
+int secondCounter = 0;
 int *frameQueueP = 0;
 int *frameModification = 0;
 struct disk *disk = NULL;
@@ -43,11 +48,6 @@ int fifoReplacement() {
 	}
 	return fifocounter;
 }
-
-int NRUReplacement() {
-	return rand()%nframes;
-}
-
 
 void page_fault_handler( struct page_table *pt, int page )
 {
@@ -66,19 +66,20 @@ void page_fault_handler( struct page_table *pt, int page )
 		if (frameQueueP[frame] == -1) {
 			frameQueueP[frame] = page;
 			page_table_set_entry(pt,page,frame,PROT_READ);
-			frameModification[frame]++;
+			//frameModification[frame]++;
 			disk_read(disk,page,&physmem[frame*PAGE_SIZE]);
 			return;
 		}
 
 		if (curbits == 1) {
-			page_table_set_entry(pt,page,*frameP,PROT_READ|PROT_WRITE);
+			page_table_set_entry(pt,page,curframe,PROT_READ|PROT_WRITE);
 			frameModification[curframe]++;
-			disk_read(disk,page,&physmem[*frameP*PAGE_SIZE]);
+			disk_read(disk,page,&physmem[curframe*PAGE_SIZE]);
 			return;
 		}
 
 	}
+
 
 	if (curframe == 0 && curbits == 0) {
 		// remove a page from physical memory
@@ -90,7 +91,21 @@ void page_fault_handler( struct page_table *pt, int page )
 			fifocounter++;
 
 		} else if(!strcmp(replacement,"custom")) {
-			replacementFrame = NRUReplacement();
+			
+			while (1) {
+				page_table_get_entry(pt,frameQueueP[secondCounter],frameP,bitsp);
+				if ( curbits < 2 ) {
+					replacementFrame = secondCounter;
+					secondCounter++;
+					secondCounter = secondCounter%nframes;
+					break;
+				} else {
+					page_table_set_entry(pt,frameQueueP[secondCounter],curframe,PROT_READ);
+					secondCounter++;
+					secondCounter = secondCounter%nframes;
+					continue;
+				}
+			}
 
 		} else {
 			fprintf(stderr,"unknown replacement algorithm: %s\n",replacement);
