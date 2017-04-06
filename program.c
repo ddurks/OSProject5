@@ -46,7 +46,7 @@ void focus_program( char *data, int length )
 		total += data[i];
 	}
 
-	printf("focus result is %d\n",total);
+	// printf("focus result is %d\n",total);
 }
 
 void sort_program( char *data, int length )
@@ -66,7 +66,7 @@ void sort_program( char *data, int length )
 		total += data[i];
 	}
 
-	printf("sort result is %d\n",total);
+	// printf("sort result is %d\n",total);
 
 }
 
@@ -86,5 +86,5 @@ void scan_program( char *cdata, int length )
 		}
 	}
 
-	printf("scan result is %d\n",total);
+	// printf("scan result is %d\n",total);
 }

@@ -31,15 +31,32 @@ Not all accesses occur on page faults
 int nframes = 1;
 int npages = 1;
 int fifocounter = 0;
-int secondCounter = 0;
+int pageFaultCounter = 0;
+int diskReads = 0;
+int diskWrites = 0;
+int customCounter = 0;
 int *frameQueueP = 0;
-int *frameModification = 0;
 struct disk *disk = NULL;
 char *physmem = NULL;
 char *replacement = NULL;
+int *customPlacement = 0;
+
+void shuffle(int *array, size_t n) {
+
+    if (n > 1) {
+        size_t i;
+        for (i = 0; i < n - 1; i++) {
+          size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+          int t = array[j];
+          array[j] = array[i];
+          array[i] = t;
+        }
+    }
+
+}
 
 int randomReplacement() {
-	return rand()%nframes;
+	return lrand48()%nframes;
 }
 
 int fifoReplacement() {
@@ -49,13 +66,19 @@ int fifoReplacement() {
 	return fifocounter;
 }
 
-int pagesReplacement() {
-	return npages%nframes;
+int customReplacement() {
+
+	if (customCounter < nframes) {
+		customCounter++;
+	} else {
+		customCounter = 0;
+	}
+	return	customPlacement[customCounter];
 }
 
 void page_fault_handler( struct page_table *pt, int page )
 {
-	printf("page fault on page #%d\n",page);
+	pageFaultCounter++;
 
 	int curframe = -1, curbits = -1;
 	int *frameP = &curframe;
@@ -63,27 +86,25 @@ void page_fault_handler( struct page_table *pt, int page )
 	int frame = 0, replacementFrame = 0;
 
 	page_table_get_entry(pt,page,frameP,bitsp);
-	frameModification[curframe]++;
 
 	for (frame = 0; frame < nframes; frame++) {
 
 		if (frameQueueP[frame] == -1) {
 			frameQueueP[frame] = page;
 			page_table_set_entry(pt,page,frame,PROT_READ);
-			//frameModification[frame]++;
 			disk_read(disk,page,&physmem[frame*PAGE_SIZE]);
+			diskReads++;
 			return;
 		}
 
 		if (curbits == 1) {
 			page_table_set_entry(pt,page,curframe,PROT_READ|PROT_WRITE);
-			frameModification[curframe]++;
 			disk_read(disk,page,&physmem[curframe*PAGE_SIZE]);
+			diskReads++;
 			return;
 		}
 
 	}
-
 
 	if (curframe == 0 && curbits == 0) {
 		// remove a page from physical memory
@@ -95,24 +116,7 @@ void page_fault_handler( struct page_table *pt, int page )
 			fifocounter++;
 
 		} else if(!strcmp(replacement,"custom")) {
-			replacementFrame = pagesReplacement();
-
-			/*
-			while (1) {
-				page_table_get_entry(pt,frameQueueP[secondCounter],frameP,bitsp);
-				if ( curbits < 2 ) {
-					replacementFrame = secondCounter;
-					secondCounter++;
-					secondCounter = secondCounter%nframes;
-					break;
-				} else {
-					page_table_set_entry(pt,frameQueueP[secondCounter],curframe,PROT_READ);
-					secondCounter++;
-					secondCounter = secondCounter%nframes;
-					continue;
-				}
-			}
-			*/
+			replacementFrame = customReplacement();
 
 		} else {
 			fprintf(stderr,"unknown replacement algorithm: %s\n",replacement);
@@ -120,21 +124,20 @@ void page_fault_handler( struct page_table *pt, int page )
 		}
 
 		page_table_get_entry(pt,frameQueueP[replacementFrame],frameP,bitsp);
-		frameModification[curframe]++;
 
 		if (curbits > 1) {
 			disk_write(disk, frameQueueP[replacementFrame], &physmem[curframe*PAGE_SIZE]);
+			diskWrites++;
 		}
 
 		disk_read(disk,page,&physmem[curframe*PAGE_SIZE]);
+		diskReads++;
 		page_table_set_entry(pt,page,curframe,PROT_READ);
 		page_table_set_entry(pt,frameQueueP[replacementFrame],0,0);
 		frameQueueP[replacementFrame] = page;
 		return;
 	}
 
-	// page_table_set_entry(pt,page,frame,PROT_READ|PROT_WRITE);
-	//disk_read(disk,2,&physmem[3*frame_size]);
 
 }
 
@@ -149,7 +152,7 @@ int main( int argc, char *argv[] )
 	nframes = atoi(argv[2]);
 	replacement = argv[3];
 	frameQueueP = malloc(sizeof(int) * nframes);
-	frameModification = malloc(sizeof(int) * nframes);
+	customPlacement = malloc(sizeof(int) * nframes);
 	const char *program = argv[4];
 	int i = 0;
 
@@ -159,15 +162,16 @@ int main( int argc, char *argv[] )
 
 	for (i = 0; i < nframes; i++) {
 		frameQueueP[i] = -1;
-		frameModification[i] = 0;
+		customPlacement[i] = i;
 	}
+
+	shuffle(customPlacement, nframes);
 
 	disk = disk_open("myvirtualdisk",npages);
 	if(!disk) {
 		fprintf(stderr,"couldn't create virtual disk: %s\n",strerror(errno));
 		return 1;
 	}
-
 
 	struct page_table *pt = page_table_create( npages, nframes, page_fault_handler );
 	if(!pt) {
@@ -193,11 +197,10 @@ int main( int argc, char *argv[] )
 		return 1;
 	}
 
+	printf("%s,%s,%d,%d,%d,%d,%d\n", replacement, program, npages, nframes, diskReads, diskWrites, pageFaultCounter );
 
-	page_table_print(pt);
 	page_table_delete(pt);
 	disk_close(disk);
-	//free(frameQueueP);
 
 	return 0;
 }
