@@ -28,6 +28,7 @@ Not all accesses occur on page faults
 #include <errno.h>
 #include <time.h>
 
+//Global variables
 int nframes = 1;
 int npages = 1;
 int fifocounter = 0;
@@ -35,12 +36,15 @@ int pageFaultCounter = 0;
 int diskReads = 0;
 int diskWrites = 0;
 int customCounter = 0;
+//Pointers for various arrays
 int *frameQueueP = 0;
 struct disk *disk = NULL;
 char *physmem = NULL;
 char *replacement = NULL;
-int *customPlacement = 0;
 
+int *customPlacement = 0; //Pointer for array used in custom replacement algorithm
+
+//Function to shuffle custom frame replacement array
 void shuffle(int *array, size_t n) {
 
     if (n > 1) {
@@ -55,10 +59,12 @@ void shuffle(int *array, size_t n) {
 
 }
 
+//Function that returns a random replacement frame number
 int randomReplacement() {
 	return lrand48()%nframes;
 }
 
+//Function that returns a fifo replacement frame number
 int fifoReplacement() {
 	if(fifocounter >= nframes){
 		fifocounter = 0;
@@ -66,6 +72,7 @@ int fifoReplacement() {
 	return fifocounter;
 }
 
+//Function that returns a custom replacement frame number
 int customReplacement() {
 
 	if (customCounter < nframes) {
@@ -76,17 +83,21 @@ int customReplacement() {
 	return	customPlacement[customCounter];
 }
 
+// Function to handle page faults
 void page_fault_handler( struct page_table *pt, int page )
 {
 	pageFaultCounter++;
 
+    // Variables and associated pointers to keep track of set bits and frame
 	int curframe = -1, curbits = -1;
 	int *frameP = &curframe;
 	int *bitsp = &curbits;
 	int frame = 0, replacementFrame = 0;
 
+    // Get page table entry
 	page_table_get_entry(pt,page,frameP,bitsp);
 
+    // For loop that fills pages in order until all have been full
 	for (frame = 0; frame < nframes; frame++) {
 
 		if (frameQueueP[frame] == -1) {
@@ -97,6 +108,7 @@ void page_fault_handler( struct page_table *pt, int page )
 			return;
 		}
 
+        // Update to read and write if read is already set
 		if (curbits == 1) {
 			page_table_set_entry(pt,page,curframe,PROT_READ|PROT_WRITE);
 			disk_read(disk,page,&physmem[curframe*PAGE_SIZE]);
@@ -106,15 +118,19 @@ void page_fault_handler( struct page_table *pt, int page )
 
 	}
 
+    // If all of the pages are full
 	if (curframe == 0 && curbits == 0) {
 		// remove a page from physical memory
+        // rand algorithm
 		if(!strcmp(replacement,"rand")) {
 			replacementFrame = randomReplacement();
 
+        // fifo algorithm
 		} else if(!strcmp(replacement,"fifo")) {
 			replacementFrame = fifoReplacement();
 			fifocounter++;
 
+        //custom algorithm
 		} else if(!strcmp(replacement,"custom")) {
 			replacementFrame = customReplacement();
 
@@ -141,8 +157,10 @@ void page_fault_handler( struct page_table *pt, int page )
 
 }
 
+// Main Execution
 int main( int argc, char *argv[] )
 {
+    // Reading in input and performing basic error checking
 	if(argc!=5) {
 		printf("use: virtmem <npages> <nframes> <rand|fifo|lru|custom> <sort|scan|focus>\n");
 		return 1;
@@ -156,10 +174,19 @@ int main( int argc, char *argv[] )
 	const char *program = argv[4];
 	int i = 0;
 
+    if (nframes < 3){
+        nframes = 3;
+    }
+
+    if (npages < 3){
+        npages = 3;
+    }
+
 	if (nframes > npages) {
 		nframes = npages;
 	}
 
+    //Initializing arrays for the frameQueue and custom placement
 	for (i = 0; i < nframes; i++) {
 		frameQueueP[i] = -1;
 		customPlacement[i] = i;
@@ -197,7 +224,9 @@ int main( int argc, char *argv[] )
 		return 1;
 	}
 
-	printf("%s,%s,%d,%d,%d,%d,%d\n", replacement, program, npages, nframes, diskReads, diskWrites, pageFaultCounter );
+    //Output
+    printf("=======================\nProgram completed with:\n%d Page Faults\n%d Disk Reads\n%d Disk Writes\n", pageFaultCounter, diskReads, diskWrites);
+	//printf("%s,%s,%d,%d,%d,%d,%d\n", replacement, program, npages, nframes, diskReads, diskWrites, pageFaultCounter );
 
 	page_table_delete(pt);
 	disk_close(disk);
