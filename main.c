@@ -50,7 +50,7 @@ void shuffle(int *array, size_t n) {
     if (n > 1) {
         size_t i;
         for (i = 0; i < n - 1; i++) {
-          size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+          size_t j = i + lrand48() / (RAND_MAX / (n - i) + 1);
           int t = array[j];
           array[j] = array[i];
           array[i] = t;
@@ -162,7 +162,7 @@ int main( int argc, char *argv[] )
 {
     // Reading in input and performing basic error checking
 	if(argc!=5) {
-		printf("use: virtmem <npages> <nframes> <rand|fifo|lru|custom> <sort|scan|focus>\n");
+		printf("use: virtmem <npages> <nframes> <rand|fifo|custom> <sort|scan|focus>\n");
 		return 1;
 	}
 	srand(time(NULL));
